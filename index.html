@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>정동고 지도</title>
+
+<style>
+
+body{
+    margin:0;
+    background:#111;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
+}
+
+#container{
+    position:relative;
+}
+
+/* 🌟 [수정] 지도의 크기를 더 큼직하게 키웠습니다. */
+#map{
+    width:1000px;
+    height:563px;
+    display:block;
+}
+
+#marker{
+    position:absolute;
+    font-size:32px;
+    color:red;
+    transform-origin:center center;
+    pointer-events:none;
+}
+
+#title {
+    position:absolute;
+    top:15px;
+    left:15px;
+    background:#5ab0ff; 
+    color:#111111;      
+    padding:10px 18px; /* 지도가 커진 만큼 타이틀 여백도 살짝 조정 */
+    border-radius:20px;
+    font-size:15px;
+    font-weight:bold;
+    z-index:1000;
+    letter-spacing: -0.5px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); 
+}
+
+#info{
+    position:absolute;
+    top:15px;
+    right:15px;
+    background:white;
+    padding:12px;
+    border-radius:10px;
+    font-size:14px;
+    z-index:1000;
+    box-shadow:0 0 5px rgba(0,0,0,0.3);
+    max-width: 200px;
+}
+
+/* 강당 알림 스타일 */
+#hall-alert {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #ccc;
+    font-size: 12px;
+}
+
+.danger-text {
+    color: #e74c3c;
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.hall-img {
+    width: 100%;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+}
+
+</style>
+</head>
+<body>
+
+<div id="container">
+
+<div id="title">♿ 교통약자를 위한 장애물 알림이</div>
+
+<img id="map" src="skyview.png">
+
+<div id="marker">▲</div>
+
+<div id="info">
+위도 : <span id="lat">-</span><br>
+경도 : <span id="lon">-</span><br>
+방향 : <span id="heading">-</span>°<br>
+상태 : <span id="status">위치 확인 중...</span>
+
+<div id="hall-alert" style="display: none;">
+    <span class="danger-text">⚠️ 계단이 있어서 위험합니다.</span>
+    <img src="jung.png" class="hall-img" alt="강당 입구">
+</div>
+</div>
+
+</div>
+
+<script>
+
+// 사진 전체 좌표
+const TOP_LAT = 35.877039018536514;
+const LEFT_LON = 128.69240748412767;
+
+const BOTTOM_LAT = 35.8760449572542;
+const RIGHT_LON = 128.69476407012218;
+
+// 강당 입구의 GPS 좌표 범위
+const hallMinLat = 35.87642733092189;
+const hallMaxLat = 35.876472540175975;
+const actualMinLon = 128.6927995660322;
+const actualMaxLon = 128.6929702224748;
+
+// 🌟 [수정] 자바스크립트 내부 계산용 이미지 크기도 1000 x 563으로 동기화했습니다.
+const IMG_WIDTH = 1000;
+const IMG_HEIGHT = 563;
+
+let heading = 0;
+
+
+// GPS → 이미지 좌표 변환
+function gpsToPixel(lat, lon){
+
+    const x =
+        ((lon - LEFT_LON) /
+        (RIGHT_LON - LEFT_LON))
+        * IMG_WIDTH;
+
+    const y =
+        ((TOP_LAT - lat) /
+        (TOP_LAT - BOTTOM_LAT))
+        * IMG_HEIGHT;
+
+    return [x,y];
+}
+
+
+// 방향 센서
+window.addEventListener(
+"deviceorientation",
+(event)=>{
+
+    if(event.alpha != null){
+
+        heading = event.alpha;
+
+        document
+        .getElementById("heading")
+        .innerText =
+        Math.round(heading);
+
+    }
+
+}
+);
+
+
+// GPS 추적
+navigator.geolocation.watchPosition(
+
+(pos)=>{
+
+    // 실제 GPS 작동 상태 반영
+    const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
+
+    document.getElementById("lat").innerText =
+        lat.toFixed(6);
+
+    document.getElementById("lon").innerText =
+        lon.toFixed(6);
+
+    const [x,y] = gpsToPixel(lat, lon);
+
+    const marker =
+        document.getElementById("marker");
+
+    marker.style.left = x + "px";
+    marker.style.top = y + "px";
+
+    marker.style.transform =
+        `translate(-50%,-50%) rotate(${heading}deg)`;
+
+
+    // 범위 판정
+    const status =
+        document.getElementById("status");
+    const hallAlert = 
+        document.getElementById("hall-alert");
+
+    if(
+        lat >= BOTTOM_LAT &&
+        lat <= TOP_LAT &&
+        lon >= LEFT_LON &&
+        lon <= RIGHT_LON
+    ){
+        status.innerHTML =
+        "<span style='color:green;font-weight:bold'>🟢 학교 범위 안</span>";
+        
+        // 학교 범위 안이면서 동시에 '강당 입구 범위'에 들어왔는지 체크
+        if(lat >= hallMinLat && lat <= hallMaxLat && lon >= actualMinLon && lon <= actualMaxLon) {
+            hallAlert.style.display = "block"; // 문구와 사진 보여주기
+        } else {
+            hallAlert.style.display = "none";  // 강당을 벗어나면 숨기기
+        }
+
+    }
+    else{
+        status.innerHTML =
+        "<span style='color:red;font-weight:bold'>🔴 학교 범위 밖</span>";
+        hallAlert.style.display = "none"; // 학교 밖으로 나가면 숨기기
+    }
+
+},
+
+(err)=>{
+
+    console.log(err);
+
+    document.getElementById("status").innerHTML =
+    "<span style='color:red'>위치 권한 필요</span>";
+
+},
+
+{
+    enableHighAccuracy:true,
+    maximumAge:0,
+    timeout:5000
+}
+
+);
+
+</script>
+
+</body>
+</html>
